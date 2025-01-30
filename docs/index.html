@@ -56,18 +56,14 @@
         updateBannerVisibility();
       }
 
-      var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/WebGlBuild.loader.js";
+      var buildUrl = "Build/";
+      var loaderUrl = buildUrl + "WebGlBuild.loader.js";
       var config = {
-        dataUrl: buildUrl + "/WebGlBuild.data",
-        frameworkUrl: buildUrl + "/WebGlBuild.framework.js",
-        codeUrl: buildUrl + "/WebGlBuild.wasm",
-        streamingAssetsUrl: "StreamingAssets",
-        companyName: "DefaultCompany",
-        productName: "CIty Builder",
-        productVersion: "0.1",
-        showBanner: unityShowBanner,
+        dataUrl: buildUrl + "WebGlBuild.data",
+        frameworkUrl: buildUrl + "WebGlBuild.framework.js",
+        codeUrl: buildUrl + "WebGlBuild.wasm",
       };
+
 
       // By default, Unity keeps WebGL canvas render target size matched with
       // the DOM size of the canvas element (scaled by window.devicePixelRatio)
