@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # This .gitignore file should be placed at the root of your Unity project directory
 #
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
@@ -11,8 +10,15 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 
+/Library/
+/Logs/
+/Temp/
+/UserSettings/
+*.blob
+.vs/
+mono_crash.*
+
 # MemoryCaptures can get excessive in size.
-# They also could contain extremely sensitive data
 /[Mm]emoryCaptures/
 
 # Recordings can get excessive in size
@@ -72,12 +78,3 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
-=======
-/Library/
-/Logs/
-/Temp/
-/UserSettings/
-*.blob
-.vs/
-mono_crash.*
->>>>>>> dc4e2cc (Fixed .gitignore and removed unnecessary files)
