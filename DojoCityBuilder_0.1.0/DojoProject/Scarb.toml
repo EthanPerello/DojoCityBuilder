@@ -1,0 +1,28 @@
+[package]
+cairo-version = "=2.8.4"
+name = "city_builder"
+version = "0.1.0"
+edition = "2024_07"
+
+[[target.starknet-contract]]
+sierra = true
+casm = true
+build-external-contracts = ["dojo::world::world_contract::world"]
+
+[dependencies]
+dojo = { git = "https://github.com/dojoengine/dojo.git", tag = "v1.0.0" }
+starknet = "2.8.4"
+
+[scripts]
+build = "sozo build"
+migrate = "sozo migrate"
+auth = "./scripts/default_auth.sh"
+test = "sozo test"
+
+[tool.dojo]
+initializer = "src/lib.cairo"
+
+[tool.dojo.env]
+rpc_url = "https://api.cartridge.gg/x/my-city-builder/katana"
+account_address = "0x5b6b8189bb580f0df1e6d6bec509ff0d6c9be7365d10627e0cf222ec1b47a71"
+private_key = "0x33003003001800009900180300d206308b0070db00121318d17b5e6262150b"
