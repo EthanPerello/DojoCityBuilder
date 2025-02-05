@@ -1,0 +1,5 @@
+version = "v0.7.1"
+branch = "main"
+tier = "basic"
+explorer = false
+http.cors_origins = ["https://ethanperello.github.io"]
