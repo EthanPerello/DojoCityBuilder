@@ -1,17 +1,19 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
+using System.Collections;
 
 public class EconomyManager : MonoBehaviour
 {
     public float updateInterval = 1f;
-    public float searchRadius = 10f;
     public float happyResidentIncome = 0.1f;
     public float unhappyResidentIncome = 0.05f;
+    public bool logDebugInfo = true;
     
     private TileManager tileManager;
     private float timer;
     private Dictionary<Vector3, BuildingInfo> buildingRegistry = new Dictionary<Vector3, BuildingInfo>();
+    private bool isInitialized = false;
 
     private class BuildingInfo
     {
@@ -37,12 +39,13 @@ public class EconomyManager : MonoBehaviour
     private void Start()
     {
         timer = updateInterval;
-        Debug.Log("EconomyManager initialized successfully");
+        isInitialized = true;
+        LogDebug("EconomyManager initialized successfully");
     }
 
     private void Update()
     {
-        if (tileManager == null) return;
+        if (tileManager == null || !isInitialized) return;
 
         timer -= Time.deltaTime;
         if (timer <= 0)
@@ -67,10 +70,29 @@ public class EconomyManager : MonoBehaviour
             return;
         }
 
-        buildingRegistry[position] = new BuildingInfo(building, buildingComponent);
+        // Use rounded position as key to avoid floating point issues
+        Vector3 roundedPosition = new Vector3(
+            Mathf.Round(position.x * 100) / 100,
+            Mathf.Round(position.y * 100) / 100,
+            Mathf.Round(position.z * 100) / 100
+        );
+
+        // Check if building already exists at this position
+        if (buildingRegistry.ContainsKey(roundedPosition))
+        {
+            // Remove the old building gameobject if it still exists
+            var oldInfo = buildingRegistry[roundedPosition];
+            if (oldInfo.buildingObject != null && oldInfo.buildingObject != building)
+            {
+                LogDebug($"Replacing existing building at {roundedPosition}");
+                Destroy(oldInfo.buildingObject);
+            }
+        }
+
+        buildingRegistry[roundedPosition] = new BuildingInfo(building, buildingComponent);
         
         BuildingType buildingType = (BuildingType)buildingComponent.building_type;
-        Debug.Log($"Successfully registered building at {position}:" +
+        LogDebug($"Successfully registered building at {roundedPosition}:" +
             $"\n - Type: {buildingType}" +
             $"\n - Residents: {buildingComponent.residents}" +
             $"\n - Jobs: {buildingComponent.jobs}" +
@@ -80,10 +102,17 @@ public class EconomyManager : MonoBehaviour
 
     public void UnregisterBuilding(Vector3 position)
     {
-        if (buildingRegistry.ContainsKey(position))
+        // Use rounded position as key to avoid floating point issues
+        Vector3 roundedPosition = new Vector3(
+            Mathf.Round(position.x * 100) / 100,
+            Mathf.Round(position.y * 100) / 100,
+            Mathf.Round(position.z * 100) / 100
+        );
+        
+        if (buildingRegistry.ContainsKey(roundedPosition))
         {
-            buildingRegistry.Remove(position);
-            Debug.Log($"Successfully unregistered building at {position}. Total buildings: {buildingRegistry.Count}");
+            buildingRegistry.Remove(roundedPosition);
+            LogDebug($"Successfully unregistered building at {roundedPosition}. Total buildings: {buildingRegistry.Count}");
         }
     }
 
@@ -91,21 +120,22 @@ public class EconomyManager : MonoBehaviour
     {
         if (buildingRegistry.Count == 0)
         {
-            Debug.Log("No buildings to process in economy update");
+            LogDebug("No buildings to process in economy update");
             return;
         }
 
         float totalIncome = 0f;
-        Debug.Log("\n=== Starting Economy Update ===");
+        LogDebug("=== Starting Economy Update ===");
 
-        foreach (var kvp in buildingRegistry)
+        foreach (var kvp in buildingRegistry.ToList()) // Create a copy of the dictionary to iterate safely
         {
             Vector3 position = kvp.Key;
             BuildingInfo buildingInfo = kvp.Value;
 
-            if (buildingInfo == null || buildingInfo.buildingData == null)
+            if (buildingInfo == null || buildingInfo.buildingData == null || buildingInfo.buildingObject == null)
             {
-                Debug.LogWarning($"Invalid building data found at {position}, skipping...");
+                LogDebug($"Invalid building data found at {position}, removing from registry...");
+                buildingRegistry.Remove(position);
                 continue;
             }
 
@@ -123,7 +153,7 @@ public class EconomyManager : MonoBehaviour
                 float happyIncome = happyResidents * happyResidentIncome * updateInterval;
                 float buildingIncome = unhappyIncome + happyIncome;
 
-                Debug.Log($"Processing residential building at {position}:" +
+                LogDebug($"Processing residential building at {position}:" +
                     $"\n - Total Residents: {totalResidents}" +
                     $"\n - Happy Residents: {happyResidents}" +
                     $"\n - Unhappy Residents: {unhappyResidents}" +
@@ -135,24 +165,50 @@ public class EconomyManager : MonoBehaviour
             }
         }
 
-        if (totalIncome > 0)
+        if (totalIncome > 0 && tileManager != null)
         {
-            Debug.Log($"Adding total income to player: {totalIncome:F2}");
+            LogDebug($"Adding total income to player: {totalIncome:F2}");
             tileManager.AddMoney(totalIncome);
         }
-    }
-
-    private List<BuildingInfo> FindNearbyBuildings(Vector3 position, float radius)
-    {
-        return buildingRegistry
-            .Where(kvp => Vector3.Distance(position, kvp.Key) <= radius)
-            .Select(kvp => kvp.Value)
-            .ToList();
     }
 
     // Helper method to validate building existence
     public bool BuildingExists(Vector3 position)
     {
-        return buildingRegistry.ContainsKey(position);
+        // Use rounded position as key to avoid floating point issues
+        Vector3 roundedPosition = new Vector3(
+            Mathf.Round(position.x * 100) / 100,
+            Mathf.Round(position.y * 100) / 100,
+            Mathf.Round(position.z * 100) / 100
+        );
+        
+        return buildingRegistry.ContainsKey(roundedPosition);
+    }
+    
+    public void ClearAllBuildings()
+    {
+        foreach (var kvp in buildingRegistry)
+        {
+            if (kvp.Value.buildingObject != null)
+            {
+                Destroy(kvp.Value.buildingObject);
+            }
+        }
+        
+        buildingRegistry.Clear();
+        LogDebug("Cleared all buildings from registry");
+    }
+    
+    private void OnDisable()
+    {
+        isInitialized = false;
+    }
+    
+    private void LogDebug(string message)
+    {
+        if (logDebugInfo)
+        {
+            Debug.Log($"[EconomyManager] {message}");
+        }
     }
 }

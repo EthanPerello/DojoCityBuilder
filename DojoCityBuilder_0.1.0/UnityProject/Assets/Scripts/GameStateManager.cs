@@ -1,113 +1,217 @@
 using UnityEngine;
-using System.Threading.Tasks;
-using Dojo;
-using Dojo.Starknet;
+using System.Collections.Generic;
 using System.Collections;
+using TMPro;
 
 public class GameStateManager : MonoBehaviour
 {
-    public WorldManager worldManager;
-    public WorldManagerData worldManagerData;
-    public Player_system playerSystem;
-    public string playerSystemAddress;
-    
-    [Header("Required Components")]
-    public TileManager tileManager;  // Add this field
-    
-    private Account account;
-    private bool isInitialized = false;
+    [Header("Player Data")]
+    public float initialPlayerMoney = 1000f;
 
+    [Header("Buildings and Tiles")]
+    private List<GameObject> placedBuildings = new List<GameObject>();
+    private Dictionary<string, bool> ownedTiles = new Dictionary<string, bool>();
+    
+    [Header("UI")]
+    public GameObject loadingScreen;
+    public TMP_Text loadingText; // Changed from Text to TMP_Text
+    
+    [Header("Debug")]
+    public bool logDebug = true;
+    
+    // References to other managers
+    private TileManager tileManager;
+    private EconomyManager economyManager;
+    private DojoManager dojoManager;
+    private bool isProcessingReset = false;
+    
+    // Events
+    public delegate void GameStateEvent();
+    public event GameStateEvent OnGameReset;
+    
     private void Awake()
     {
-        // Replace the GetComponent call with reference check
+        tileManager = FindObjectOfType<TileManager>();
         if (tileManager == null)
         {
-            Debug.LogError("TileManager reference is missing! Please assign it in the inspector.");
-            return;
+            Debug.LogError("TileManager not found in scene!");
         }
-
-        playerSystem = gameObject.AddComponent<Player_system>();
-        playerSystem.contractAddress = playerSystemAddress;
-        Debug.Log($"PlayerSystem contract address: {playerSystem.contractAddress}");
-
+        
+        economyManager = FindObjectOfType<EconomyManager>();
+        if (economyManager == null)
+        {
+            Debug.LogError("EconomyManager not found in scene!");
+        }
+        
+        dojoManager = FindObjectOfType<DojoManager>();
+        if (dojoManager == null)
+        {
+            Debug.LogError("DojoManager not found in scene!");
+        }
+        
+        if (loadingScreen != null)
+            loadingScreen.SetActive(false);
     }
-
+    
     private void Start()
     {
-        StartCoroutine(InitializeGameStateCoroutine());
+        StartCoroutine(InitializeGameCoroutine());
     }
-
-    private IEnumerator InitializeGameStateCoroutine()
+    
+    private IEnumerator InitializeGameCoroutine()
     {
-        Debug.Log("Initializing game state...");
+        // Show loading screen
+        ShowLoadingScreen("Initializing game...");
         
-        // Initialize Dojo connection
-        if (worldManagerData == null)
-        {
-            Debug.LogError("WorldManagerData is null!");
-            yield break;
-        }
-
-        var provider = new JsonRpcClient(worldManagerData.rpcUrl);
-        var signer = new SigningKey(worldManagerData.masterPrivateKey);
-        account = new Account(provider, signer, new FieldElement(worldManagerData.masterAddress));
-
-        // Initialize player if needed
-        var initTask = InitializePlayerIfNeeded();
+        // Wait a frame to ensure other scripts are initialized
+        yield return null;
         
-        while (!initTask.IsCompleted)
+        // Set initial money if no money has been loaded from blockchain
+        if (tileManager != null)
         {
-            yield return null;
+            tileManager.SetPlayerMoney(initialPlayerMoney);
         }
-
-        if (initTask.Exception != null)
-        {
-            Debug.LogError($"Failed to initialize player: {initTask.Exception}");
-            yield break;
-        }
-
-        isInitialized = true;
-        Debug.Log("Game state initialized successfully");
+        
+        // No need to wait for DojoManager here since it runs its own initialization
+        
+        // Hide loading screen after a short delay
+        yield return new WaitForSeconds(0.5f);
+        HideLoadingScreen();
+        
+        LogDebug("Game initialized successfully!");
     }
-
-    private async Task InitializePlayerIfNeeded()
+    
+    public void RegisterBuilding(GameObject building)
     {
-        try
+        if (building != null && !placedBuildings.Contains(building))
         {
-            Debug.Log("Starting player initialization...");
-            Debug.Log($"Using account address: {account.Address}");
-            var txHash = await playerSystem.initialize_player(account);
-            Debug.Log($"Player initialization tx hash: {txHash}");
-            
-            // Wait for transaction confirmation
-            await Task.Delay(2000); // Add a delay to wait for transaction processing
-            
-            Debug.Log("Player initialization completed");
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Detailed initialization error: {e.Message}");
-            Debug.LogError($"Stack trace: {e.StackTrace}");
-            throw;
+            placedBuildings.Add(building);
         }
     }
-
-    public async Task UpdatePlayerMoney(float money)
+    
+    public void RegisterOwnedTile(uint x, uint y)
     {
-        if (!isInitialized) 
+        string tileKey = $"{x},{y}";
+        ownedTiles[tileKey] = true;
+    }
+    
+    public bool IsTileOwned(uint x, uint y)
+    {
+        string tileKey = $"{x},{y}";
+        return ownedTiles.ContainsKey(tileKey) && ownedTiles[tileKey];
+    }
+    
+    public void ResetPlayerData()
+    {
+        if (isProcessingReset)
         {
-            Debug.LogWarning("Cannot update player money - GameStateManager not initialized");
+            LogDebug("Reset already in progress, ignoring request");
             return;
         }
-
+        
+        isProcessingReset = true;
+        
+        // Show loading screen
+        ShowLoadingScreen("Resetting game data...");
+        
         try
         {
-            await playerSystem.update_money(account, (ulong)money);
-            Debug.Log($"Updated player money: {money}");
+            // First reset data on blockchain if connected
+            bool blockchainResetSuccess = false;
+            
+            if (dojoManager != null && dojoManager.IsInitialized())
+            {
+                LogDebug("Resetting player data on blockchain...");
+                // Pass a callback to ResetPlayerOnChain
+                dojoManager.ResetPlayerOnChain((success) => {
+                    blockchainResetSuccess = success;
+                    LogDebug(success ? "Blockchain reset successful!" : "Blockchain reset failed");
+                });
+            }
+            
+            // Reset player money
+            if (tileManager != null)
+            {
+                tileManager.SetPlayerMoney(initialPlayerMoney);
+            }
+            
+            // Clear buildings
+            foreach (var building in placedBuildings)
+            {
+                if (building != null)
+                {
+                    Destroy(building);
+                }
+            }
+            placedBuildings.Clear();
+            
+            // Clear owned tiles
+            ownedTiles.Clear();
+            
+            // Update tile visuals
+            var tileVisuals = FindObjectsOfType<TileVisual>();
+            foreach (var tile in tileVisuals)
+            {
+                if (tile != null && tile.TileData != null)
+                {
+                    tile.TileData.player = null;
+                    tile.ForceRegenerateMaterial();
+                    tile.UpdateVisuals();
+                }
+            }
+            
+            // Reset economy
+            if (economyManager != null)
+            {
+                economyManager.ClearAllBuildings();
+            }
+            
+            // Trigger reset event
+            if (OnGameReset != null)
+            {
+                OnGameReset();
+            }
+            
+            LogDebug("Game state reset successfully");
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"Failed to update player money: {e.Message}");
+            Debug.LogError($"Error resetting player data: {e.Message}");
+        }
+        finally
+        {
+            // Hide loading screen
+            HideLoadingScreen();
+            isProcessingReset = false;
+        }
+    }
+    
+    private void ShowLoadingScreen(string message)
+    {
+        if (loadingScreen != null)
+        {
+            loadingScreen.SetActive(true);
+            
+            if (loadingText != null)
+            {
+                loadingText.text = message;
+            }
+        }
+    }
+    
+    private void HideLoadingScreen()
+    {
+        if (loadingScreen != null)
+        {
+            loadingScreen.SetActive(false);
+        }
+    }
+    
+    private void LogDebug(string message)
+    {
+        if (logDebug)
+        {
+            Debug.Log($"[GameStateManager] {message}");
         }
     }
 }

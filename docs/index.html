@@ -57,11 +57,11 @@
       }
 
       var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/WebGLBuild.loader.js";
+      var loaderUrl = buildUrl + "/WebGLBuild1.loader.js";
       var config = {
-        dataUrl: buildUrl + "/WebGLBuild.data",
-        frameworkUrl: buildUrl + "/WebGLBuild.framework.js",
-        codeUrl: buildUrl + "/WebGLBuild.wasm",
+        dataUrl: buildUrl + "/WebGLBuild1.data",
+        frameworkUrl: buildUrl + "/WebGLBuild1.framework.js",
+        codeUrl: buildUrl + "/WebGLBuild1.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "CIty Builder",
@@ -100,12 +100,25 @@
 
       loadingBar.style.display = "block";
 
+      var dojoScript = document.createElement("script");
+      dojoScript.src = "TemplateData/dojo.js/dojo_c.js";
+      dojoScript.onload = async () => {
+        await wasm_bindgen();
+      };
+      document.body.appendChild(dojoScript);
+
+      // var starknetScript = document.createElement("script");
+      // starknetScript.src = "TemplateData/starknet-5.24.3.js";
+      // document.body.appendChild(starknetScript);
+
+      var gameInstance = null;
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
           progressBarFull.style.width = 100 * progress + "%";
               }).then((unityInstance) => {
+                gameInstance = unityInstance;
                 loadingBar.style.display = "none";
                 fullscreenButton.onclick = () => {
                   unityInstance.SetFullscreen(1);

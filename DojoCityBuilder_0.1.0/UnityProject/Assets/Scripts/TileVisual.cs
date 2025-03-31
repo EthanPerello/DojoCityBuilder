@@ -4,14 +4,17 @@ using UnityEngine.EventSystems;
 
 public class TileVisual : MonoBehaviour
 {
-    public city_builder_Tile TileData { get; private set; }
+    public city_builder_Tile TileData { get; set; }
     private TileManager tileManager;
     private new Renderer renderer;
     private bool isSelected;
+    private Material tileMaterial;
+    private DojoManager dojoManager;
 
     [Header("Colors")]
     public Color defaultColor = Color.white;
     public Color ownedColor = new Color(0.2f, 0.8f, 0.2f);
+    public Color otherPlayerOwnedColor = new Color(0.8f, 0.2f, 0.2f); // Red for other player's tiles
     public Color hoveredColor = new Color(0.8f, 0.8f, 0.8f);
     public Color selectedColor = Color.yellow;
 
@@ -21,9 +24,11 @@ public class TileVisual : MonoBehaviour
     public float roadHeight = 0.05f;
     private GameObject[] roadPieces;
 
+    [Header("Debug")]
+    public bool logDebug = true;
+
     private void Awake()
     {
-        Debug.Log($"TileVisual Awake() called for tile {gameObject.name}");
         renderer = GetComponent<Renderer>();
         if (renderer == null)
         {
@@ -32,13 +37,19 @@ public class TileVisual : MonoBehaviour
         }
 
         tileManager = FindObjectOfType<TileManager>();
-        if (tileManager == null)
-        {
-            Debug.LogError("TileManager not found in scene!");
-        }
+        dojoManager = FindObjectOfType<DojoManager>();
 
         // Create unique material instance
-        renderer.material = new Material(renderer.sharedMaterial);
+        if (renderer.sharedMaterial != null)
+        {
+            tileMaterial = new Material(renderer.sharedMaterial);
+            renderer.material = tileMaterial;
+        }
+        else
+        {
+            tileMaterial = new Material(Shader.Find("Standard"));
+            renderer.material = tileMaterial;
+        }
         
         // Initialize array to store road pieces
         roadPieces = new GameObject[5]; // 1 intersection + 4 straight pieces
@@ -46,55 +57,96 @@ public class TileVisual : MonoBehaviour
 
     public void Initialize(uint x, uint y)
     {
-        Debug.Log($"Initializing tile at position ({x}, {y})");
-        TileData = gameObject.AddComponent<city_builder_Tile>();
+        // Create or get TileData component
+        TileData = GetComponent<city_builder_Tile>();
+        if (TileData == null)
+        {
+            TileData = gameObject.AddComponent<city_builder_Tile>();
+        }
+        
         TileData.x = x;
         TileData.y = y;
         TileData.player = null;
+        
+        // Generate a simple tile ID
+        TileData.tile_id = ((ulong)x * 1000) + (ulong)y;
+        
         UpdateVisuals();
         PlaceRoads();
     }
 
+    public void ForceRegenerateMaterial()
+    {
+        if (renderer != null)
+        {
+            // Create a new unique material instance
+            if (renderer.sharedMaterial != null)
+            {
+                tileMaterial = new Material(renderer.sharedMaterial);
+            }
+            else
+            {
+                tileMaterial = new Material(Shader.Find("Standard"));
+            }
+            
+            renderer.material = tileMaterial;
+        }
+    }
+
     private void PlaceRoads()
     {
-        // Get the base position of the tile and add the height offset
-        Vector3 centerPosition = transform.position + new Vector3(0, roadHeight, 0);
-        
+        // Only place roads if prefabs are assigned
+        if (straightRoadPrefab == null || intersectionPrefab == null)
+            return;
+            
         // Clean up any existing road pieces
         CleanupRoads();
         
+        // Get the base position of the tile and add the height offset
+        Vector3 centerPosition = transform.position + new Vector3(0, roadHeight, 0);
+        
         // Place intersection in the center
         roadPieces[0] = Instantiate(intersectionPrefab, centerPosition, Quaternion.identity, transform);
-
-        // Place straight road pieces extending from the intersection
-        float roadLength = 1f; // Adjust based on your road piece length
+        roadPieces[0].name = "Intersection";
+        
+        // Place road pieces in cardinal directions
+        float roadLength = 1f;
         
         // North road
-        Vector3 northPos = centerPosition + Vector3.forward * roadLength/2;
-        roadPieces[1] = Instantiate(straightRoadPrefab, northPos, Quaternion.Euler(0, 0, 0), transform);
+        roadPieces[1] = Instantiate(straightRoadPrefab, 
+            centerPosition + Vector3.forward * roadLength/2, 
+            Quaternion.Euler(0, 0, 0), transform);
+        roadPieces[1].name = "Road_North";
         
         // South road
-        Vector3 southPos = centerPosition + Vector3.back * roadLength/2;
-        roadPieces[2] = Instantiate(straightRoadPrefab, southPos, Quaternion.Euler(0, 180, 0), transform);
+        roadPieces[2] = Instantiate(straightRoadPrefab, 
+            centerPosition + Vector3.back * roadLength/2, 
+            Quaternion.Euler(0, 180, 0), transform);
+        roadPieces[2].name = "Road_South";
         
         // East road
-        Vector3 eastPos = centerPosition + Vector3.right * roadLength/2;
-        roadPieces[3] = Instantiate(straightRoadPrefab, eastPos, Quaternion.Euler(0, 90, 0), transform);
+        roadPieces[3] = Instantiate(straightRoadPrefab, 
+            centerPosition + Vector3.right * roadLength/2, 
+            Quaternion.Euler(0, 90, 0), transform);
+        roadPieces[3].name = "Road_East";
         
         // West road
-        Vector3 westPos = centerPosition + Vector3.left * roadLength/2;
-        roadPieces[4] = Instantiate(straightRoadPrefab, westPos, Quaternion.Euler(0, 270, 0), transform);
+        roadPieces[4] = Instantiate(straightRoadPrefab, 
+            centerPosition + Vector3.left * roadLength/2, 
+            Quaternion.Euler(0, 270, 0), transform);
+        roadPieces[4].name = "Road_West";
     }
 
     private void CleanupRoads()
     {
         if (roadPieces != null)
         {
-            foreach (GameObject roadPiece in roadPieces)
+            for (int i = 0; i < roadPieces.Length; i++)
             {
-                if (roadPiece != null)
+                if (roadPieces[i] != null)
                 {
-                    Destroy(roadPiece);
+                    Destroy(roadPieces[i]);
+                    roadPieces[i] = null;
                 }
             }
         }
@@ -102,20 +154,24 @@ public class TileVisual : MonoBehaviour
 
     private void OnMouseEnter()
     {
-        Debug.Log($"Mouse entered tile at ({TileData.x}, {TileData.y})");
         if (!EventSystem.current.IsPointerOverGameObject() && 
-            !tileManager.IsInBuildingPlacement && 
-            !isSelected && 
-            TileData.player == null)
+            (tileManager == null || !tileManager.IsInBuildingPlacement) && 
+            !isSelected)
         {
-            renderer.material.color = hoveredColor;
+            // Only show hover effect on unowned tiles
+            if (!IsTileOwned())
+            {
+                if (renderer != null && renderer.material != null)
+                {
+                    renderer.material.color = hoveredColor;
+                }
+            }
         }
     }
 
     private void OnMouseExit()
     {
-        Debug.Log($"Mouse exited tile at ({TileData.x}, {TileData.y})");
-        if (!isSelected && TileData.player == null)
+        if (!isSelected)
         {
             UpdateVisuals();
         }
@@ -123,17 +179,18 @@ public class TileVisual : MonoBehaviour
 
     private void OnMouseDown()
     {
-        Debug.Log($"Mouse clicked on tile at ({TileData.x}, {TileData.y})");
-        if (!EventSystem.current.IsPointerOverGameObject() && !tileManager.IsInBuildingPlacement)
+        if (!EventSystem.current.IsPointerOverGameObject() && 
+            (tileManager == null || !tileManager.IsInBuildingPlacement))
         {
-            Debug.Log("Calling SelectTile on TileManager");
-            tileManager.SelectTile(this);
+            if (tileManager != null)
+            {
+                tileManager.SelectTile(this);
+            }
         }
     }
 
     public void SetSelected(bool selected)
     {
-        Debug.Log($"Setting selected={selected} for tile at ({TileData.x}, {TileData.y})");
         isSelected = selected;
         UpdateVisuals();
     }
@@ -142,24 +199,79 @@ public class TileVisual : MonoBehaviour
     {
         if (renderer == null || renderer.material == null)
         {
-            Debug.LogError($"Renderer or material is null on tile at ({TileData.x}, {TileData.y})");
             return;
         }
 
-        if (isSelected)
+        // Set color based on state
+        Color targetColor = defaultColor;
+        
+        if (TileData != null)
         {
-            renderer.material.color = selectedColor;
-            Debug.Log($"Updated tile color to selected at ({TileData.x}, {TileData.y})");
+            bool owned = IsTileOwned();
+            bool ownedByCurrentPlayer = IsTileOwnedByCurrentPlayer();
+            
+            if (isSelected)
+            {
+                targetColor = selectedColor;
+            }
+            else if (ownedByCurrentPlayer)
+            {
+                targetColor = ownedColor;
+            }
+            else if (owned)
+            {
+                targetColor = otherPlayerOwnedColor;
+            }
+            else
+            {
+                targetColor = defaultColor;
+            }
         }
-        else if (TileData.player != null)
+
+        // Apply color
+        renderer.material.color = targetColor;
+    }
+
+    public bool IsTileOwned()
+    {
+        try
         {
-            renderer.material.color = ownedColor;
-            Debug.Log($"Updated tile color to owned at ({TileData.x}, {TileData.y})");
+            if (TileData == null || TileData.player == null)
+            {
+                return false;
+            }
+            
+            // Check if player address is zero
+            string playerHex = TileData.player.Hex();
+            if (string.IsNullOrEmpty(playerHex) || 
+                playerHex == "0x0" || 
+                playerHex == "0x0000000000000000000000000000000000000000000000000000000000000000")
+            {
+                return false;
+            }
+            
+            return true;
         }
-        else
+        catch
         {
-            renderer.material.color = defaultColor;
-            Debug.Log($"Updated tile color to default at ({TileData.x}, {TileData.y})");
+            return false;
+        }
+    }
+
+    public bool IsTileOwnedByCurrentPlayer()
+    {
+        try
+        {
+            if (!IsTileOwned() || dojoManager == null || !dojoManager.IsInitialized())
+            {
+                return false;
+            }
+            
+            return dojoManager.IsPlayerOwner(TileData.player);
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -167,5 +279,4 @@ public class TileVisual : MonoBehaviour
     {
         CleanupRoads();
     }
-    
 }

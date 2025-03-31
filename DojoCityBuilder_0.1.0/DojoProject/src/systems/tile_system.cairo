@@ -8,9 +8,9 @@ pub trait ITileSystem<TContractState> {
 
 #[dojo::contract]
 mod tile_system {
-    use starknet::{ContractAddress, get_caller_address};
+    use starknet::{ContractAddress, get_caller_address, get_block_info};
     use dojo::world::{IWorldDispatcher};
-    use dojo::model::ModelStorage;
+    use dojo::model::{ModelStorage};
     use super::{ITileSystem};
     use crate::models::Tile;
 
@@ -41,11 +41,19 @@ mod tile_system {
             // Get the caller's address
             let player = get_caller_address();
             
+            // Generate a unique tile ID by combining block info with coordinates
+            let block_info = get_block_info().unbox();
+            // Convert u32 to u64 properly
+            let x_u64: u64 = x.into();
+            let y_u64: u64 = y.into();
+            let tile_id = block_info.block_number * 10000 + x_u64 * 100 + y_u64;
+            
             // Create the new tile
             let new_tile = Tile { 
                 player,
                 x,
-                y 
+                y,
+                tile_id
             };
             
             // Write the tile to the world

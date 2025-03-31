@@ -26,6 +26,7 @@ namespace Dojo
 
         public UnityEvent<List<GameObject>> OnSynchronized;
         public UnityEvent<GameObject> OnEntitySpawned;
+        public UnityEvent<ModelInstance> OnModelUpdated;
         public UnityEvent<ModelInstance> OnEventMessage;
 
         // Awake is called when the script instance is being loaded.
@@ -105,18 +106,16 @@ namespace Dojo
                 string[] parts = entityModel.Name.Split('-');
                 string @namespace = parts[0];
                 string name = parts[1];
+                var model = models.FirstOrDefault(m => m.GetType().Name == $"{@namespace}_{name}");
+                if (model == null)
+                {
+                    Debug.LogWarning($"Model {entityModel.Name} not found");
+                    continue;
+                }
 
-                var component = entity.GetComponent(name);
+                var component = entity.GetComponent(model.GetType());
                 if (component == null)
                 {
-                    // TODO: decouple?
-                    var model = models.FirstOrDefault(m => m.GetType().Name == $"{@namespace}_{name}");
-                    if (model == null)
-                    {
-                        Debug.LogWarning($"Model {entityModel.Name} not found");
-                        continue;
-                    }
-
                     // we dont need to initialize the component
                     // because it'll get updated
                     component = (ModelInstance)entity.AddComponent(model.GetType());
@@ -124,6 +123,7 @@ namespace Dojo
 
                 // update component with new model data
                 ((ModelInstance)component).OnUpdate(entityModel);
+                OnModelUpdated?.Invoke(model);
             }
         }
 
@@ -131,7 +131,10 @@ namespace Dojo
         {
             foreach (var entityModel in entityModels)
             {
-                var model = models.FirstOrDefault(m => m.GetType().Name == entityModel.Name);
+                string[] parts = entityModel.Name.Split('-');
+                string @namespace = parts[0];
+                string name = parts[1];
+                var model = models.FirstOrDefault(m => m.GetType().Name == $"{@namespace}_{name}");
                 if (model == null)
                 {
                     Debug.LogWarning($"Model {entityModel.Name} not found");

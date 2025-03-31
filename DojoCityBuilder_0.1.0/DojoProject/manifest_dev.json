@@ -1,9 +1,9 @@
 {
   "world": {
     "class_hash": "0x79d9ce84b97bcc2a631996c3100d57966fc2f5b061fb1ec4dfd0040976bcac6",
-    "address": "0x1d06e99cdd64a00d85e7a0788eb7e42e7aae328b802813a5ec678c80fec5a40",
-    "seed": "city_builder",
-    "name": "city-builder",
+    "address": "0x61c6ef0ebb3d329efbecadba292b2ed60121b05c56fc18f40c243ceb03db24a",
+    "seed": "city_builder_v2",
+    "name": "city-builder-v2",
     "entrypoints": [
       "uuid",
       "set_metadata",
@@ -1243,8 +1243,8 @@
   },
   "contracts": [
     {
-      "address": "0x6ed2468c40a06f38e8dbc8454dc0c4e1bad1ae1e7b173f0de35b12428c24ed1",
-      "class_hash": "0x7321a3d659b107b92b7627e0403a2fc597711c8f52338a61cb3cacae7c8192e",
+      "address": "0x3369ce76d165154a8d849aca69e0b19adb90af999d140082cc8d02463c2362c",
+      "class_hash": "0x744b13a400e68f6dc815ea83f61dd0595e6b0fd0fd4bdf3df0ba8564891ea45",
       "abi": [
         {
           "type": "impl",
@@ -1335,6 +1335,22 @@
                 },
                 {
                   "name": "rotation",
+                  "type": "core::integer::u32"
+                }
+              ],
+              "outputs": [],
+              "state_mutability": "external"
+            },
+            {
+              "type": "function",
+              "name": "remove_building",
+              "inputs": [
+                {
+                  "name": "x",
+                  "type": "core::integer::u32"
+                },
+                {
+                  "name": "y",
                   "type": "core::integer::u32"
                 }
               ],
@@ -1469,6 +1485,28 @@
         },
         {
           "type": "event",
+          "name": "city_builder::systems::building_system::building_system::BuildingRemoved",
+          "kind": "struct",
+          "members": [
+            {
+              "name": "player",
+              "type": "core::starknet::contract_address::ContractAddress",
+              "kind": "data"
+            },
+            {
+              "name": "x",
+              "type": "core::integer::u32",
+              "kind": "data"
+            },
+            {
+              "name": "y",
+              "type": "core::integer::u32",
+              "kind": "data"
+            }
+          ]
+        },
+        {
+          "type": "event",
           "name": "city_builder::systems::building_system::building_system::Event",
           "kind": "enum",
           "variants": [
@@ -1486,6 +1524,11 @@
               "name": "BuildingPlaced",
               "type": "city_builder::systems::building_system::building_system::BuildingPlaced",
               "kind": "nested"
+            },
+            {
+              "name": "BuildingRemoved",
+              "type": "city_builder::systems::building_system::building_system::BuildingRemoved",
+              "kind": "nested"
             }
           ]
         }
@@ -1495,11 +1538,12 @@
       "selector": "0x26ed4dcb020a07ff814becbabb15c7b014dd3fe2497d42cc5f7eb6b2acf0bf4",
       "systems": [
         "place_building",
+        "remove_building",
         "upgrade"
       ]
     },
     {
-      "address": "0x345fbee5f2fd4bc74e449007c26247be3e95da6d5ea2b579000409d77728667",
+      "address": "0x3be249f6155ccff1cd98b02098bb60e37c8986adfb9d4f0c1dc6b0bb9487edb",
       "class_hash": "0x44c72715f8c81a3799065caade144e540978143fa5133c20a30ae22bada6b54",
       "abi": [
         {
@@ -1751,8 +1795,220 @@
       ]
     },
     {
-      "address": "0x70abce844891e5b0e65c3f07169f6db14287838345a3b61f920802388f2b7dd",
-      "class_hash": "0x6cdef20176a7f4dbecf605131db8852ada322397aad00ab7d2bc2536ead656a",
+      "address": "0x27959af3f329f38ce957fec69d566a0c5ff6a4323312ccb50cf97587c2ffda4",
+      "class_hash": "0x53ff8c6eb67de6d4d4b8f0869809a83f27e0059881b1ca51918243fbe821a3a",
+      "abi": [
+        {
+          "type": "impl",
+          "name": "reset_system__ContractImpl",
+          "interface_name": "dojo::contract::interface::IContract"
+        },
+        {
+          "type": "interface",
+          "name": "dojo::contract::interface::IContract",
+          "items": []
+        },
+        {
+          "type": "impl",
+          "name": "reset_system__DeployedContractImpl",
+          "interface_name": "dojo::meta::interface::IDeployedResource"
+        },
+        {
+          "type": "struct",
+          "name": "core::byte_array::ByteArray",
+          "members": [
+            {
+              "name": "data",
+              "type": "core::array::Array::<core::bytes_31::bytes31>"
+            },
+            {
+              "name": "pending_word",
+              "type": "core::felt252"
+            },
+            {
+              "name": "pending_word_len",
+              "type": "core::integer::u32"
+            }
+          ]
+        },
+        {
+          "type": "interface",
+          "name": "dojo::meta::interface::IDeployedResource",
+          "items": [
+            {
+              "type": "function",
+              "name": "dojo_name",
+              "inputs": [],
+              "outputs": [
+                {
+                  "type": "core::byte_array::ByteArray"
+                }
+              ],
+              "state_mutability": "view"
+            }
+          ]
+        },
+        {
+          "type": "impl",
+          "name": "ResetSystemImpl",
+          "interface_name": "city_builder::systems::reset_system::IResetSystem"
+        },
+        {
+          "type": "interface",
+          "name": "city_builder::systems::reset_system::IResetSystem",
+          "items": [
+            {
+              "type": "function",
+              "name": "reset_player_data",
+              "inputs": [],
+              "outputs": [],
+              "state_mutability": "external"
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "dojo_init",
+          "inputs": [],
+          "outputs": [],
+          "state_mutability": "view"
+        },
+        {
+          "type": "impl",
+          "name": "WorldProviderImpl",
+          "interface_name": "dojo::contract::components::world_provider::IWorldProvider"
+        },
+        {
+          "type": "struct",
+          "name": "dojo::world::iworld::IWorldDispatcher",
+          "members": [
+            {
+              "name": "contract_address",
+              "type": "core::starknet::contract_address::ContractAddress"
+            }
+          ]
+        },
+        {
+          "type": "interface",
+          "name": "dojo::contract::components::world_provider::IWorldProvider",
+          "items": [
+            {
+              "type": "function",
+              "name": "world_dispatcher",
+              "inputs": [],
+              "outputs": [
+                {
+                  "type": "dojo::world::iworld::IWorldDispatcher"
+                }
+              ],
+              "state_mutability": "view"
+            }
+          ]
+        },
+        {
+          "type": "impl",
+          "name": "UpgradeableImpl",
+          "interface_name": "dojo::contract::components::upgradeable::IUpgradeable"
+        },
+        {
+          "type": "interface",
+          "name": "dojo::contract::components::upgradeable::IUpgradeable",
+          "items": [
+            {
+              "type": "function",
+              "name": "upgrade",
+              "inputs": [
+                {
+                  "name": "new_class_hash",
+                  "type": "core::starknet::class_hash::ClassHash"
+                }
+              ],
+              "outputs": [],
+              "state_mutability": "external"
+            }
+          ]
+        },
+        {
+          "type": "constructor",
+          "name": "constructor",
+          "inputs": []
+        },
+        {
+          "type": "event",
+          "name": "dojo::contract::components::upgradeable::upgradeable_cpt::Upgraded",
+          "kind": "struct",
+          "members": [
+            {
+              "name": "class_hash",
+              "type": "core::starknet::class_hash::ClassHash",
+              "kind": "data"
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "name": "dojo::contract::components::upgradeable::upgradeable_cpt::Event",
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "Upgraded",
+              "type": "dojo::contract::components::upgradeable::upgradeable_cpt::Upgraded",
+              "kind": "nested"
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "name": "dojo::contract::components::world_provider::world_provider_cpt::Event",
+          "kind": "enum",
+          "variants": []
+        },
+        {
+          "type": "event",
+          "name": "city_builder::systems::reset_system::reset_system::PlayerDataReset",
+          "kind": "struct",
+          "members": [
+            {
+              "name": "player",
+              "type": "core::starknet::contract_address::ContractAddress",
+              "kind": "data"
+            }
+          ]
+        },
+        {
+          "type": "event",
+          "name": "city_builder::systems::reset_system::reset_system::Event",
+          "kind": "enum",
+          "variants": [
+            {
+              "name": "UpgradeableEvent",
+              "type": "dojo::contract::components::upgradeable::upgradeable_cpt::Event",
+              "kind": "nested"
+            },
+            {
+              "name": "WorldProviderEvent",
+              "type": "dojo::contract::components::world_provider::world_provider_cpt::Event",
+              "kind": "nested"
+            },
+            {
+              "name": "PlayerDataReset",
+              "type": "city_builder::systems::reset_system::reset_system::PlayerDataReset",
+              "kind": "nested"
+            }
+          ]
+        }
+      ],
+      "init_calldata": [],
+      "tag": "city_builder-reset_system",
+      "selector": "0x69090288d9c58bdfce839e413e6a7f192e713c79b847b52d37daa1131da12c6",
+      "systems": [
+        "reset_player_data",
+        "upgrade"
+      ]
+    },
+    {
+      "address": "0x3001ebedc5f8972fb84d28e36ffc5967db47367bf07cafdc5f85db5d715a352",
+      "class_hash": "0x37ce649320784147c7206c34d5e2114140ff7cc3f3d51e40c5a3cf4f6d49fe",
       "abi": [
         {
           "type": "impl",
@@ -1985,7 +2241,7 @@
   "models": [
     {
       "members": [],
-      "class_hash": "0x49c0b89947fc92f575c3ab4e97d86c886930e9ed6e68a23a27e6c58598a2b4b",
+      "class_hash": "0x7ee31ce9d9891a8ce15584464a3ca8acab583c3f273c8598d69232abf101e45",
       "tag": "city_builder-Building",
       "selector": "0x7f7befa46c5af6efed337d4d77aebdd5faff316407b7495b3ded90265dcf594"
     },
@@ -1997,7 +2253,7 @@
     },
     {
       "members": [],
-      "class_hash": "0x441c59d6c3ba8caff823642af8a2dde425967422239d286fd1a2880dd7f78ed",
+      "class_hash": "0xd5a3126c385110d7ff6236492f0edb7f0f3cb532029c6f2525922ca88a45d2",
       "tag": "city_builder-Tile",
       "selector": "0x735bdbd94b4860bc399f08268770713062cf06489f4eb6c44c4bd9e7b0a8e82"
     }

@@ -5,7 +5,9 @@ use starknet::ContractAddress;
 pub struct Building {
     #[key]
     pub player: ContractAddress,
+    #[key]
     pub x: u32,
+    #[key]
     pub y: u32,
     pub building_type: u32,
     pub residents: u32,
@@ -20,8 +22,11 @@ pub struct Building {
 pub struct Tile {
     #[key]
     pub player: ContractAddress,
+    #[key]
     pub x: u32,
+    #[key]
     pub y: u32,
+    pub tile_id: u64, // Non-key field
 }
 
 #[derive(Copy, Drop, Serde, starknet::Store)]

@@ -1,20 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
-using System.Threading.Tasks;
-using Dojo;
-using Dojo.Starknet;
+using System.Collections;
 using TMPro;
-using System.Collections.Generic;
-using dojo_bindings;
+using System.Threading.Tasks;
 
 public class BuildingManager : MonoBehaviour
 {
-    [Header("Dojo Configuration")]
-    public WorldManager worldManager;
-    public WorldManagerData dojoConfig;
-    public string buildingSystemAddress;
-
     [Header("UI Configuration")]
     public GameObject buildingMenuUI;
     public GameObject placementMenuUI;
@@ -26,12 +18,21 @@ public class BuildingManager : MonoBehaviour
     public TMP_Text buildingDescriptionText;
     public TMP_Text buildingCostText;
     public Button nextBuildingButton;
+    public GameObject loadingPanel;
+    public TMP_Text loadingText;
 
     [Header("Building Settings")]
     public BuildingData[] availableBuildings;
     public float rotationAngle = 90f;
     public float gridSize = 1f;
     public LayerMask groundLayer;
+    
+    [Header("References")]
+    public TileManager tileManager;
+    public EconomyManager economyManager;
+    
+    [Header("Debug")]
+    public bool logDebugInfo = true;
     
     private BuildingPlacementValidator placementValidator;
     private int currentBuildingIndex = 0;
@@ -42,8 +43,9 @@ public class BuildingManager : MonoBehaviour
     private float currentRotation = 0f;
     private bool isValidPlacement;
     private Vector3 lastValidPosition;
-    private TileManager tileManager;
-    private Building_system buildingSystem;
+    private GameStateManager gameStateManager;
+    private DojoManager dojoManager;
+    private bool isProcessingTransaction = false;
 
     public bool IsPlacing => isPlacing;
 
@@ -56,9 +58,27 @@ public class BuildingManager : MonoBehaviour
 
     private void InitializeComponents()
     {
-        tileManager = FindObjectOfType<TileManager>();
         if (tileManager == null)
-            Debug.LogError("TileManager not found in scene!");
+        {
+            tileManager = FindObjectOfType<TileManager>();
+            if (tileManager == null)
+                Debug.LogError("TileManager not found in scene!");
+        }
+
+        if (economyManager == null)
+        {
+            economyManager = FindObjectOfType<EconomyManager>();
+            if (economyManager == null)
+                Debug.LogError("EconomyManager not found in scene!");
+        }
+        
+        gameStateManager = FindObjectOfType<GameStateManager>();
+        if (gameStateManager == null)
+            Debug.LogError("GameStateManager not found in scene!");
+            
+        dojoManager = FindObjectOfType<DojoManager>();
+        if (dojoManager == null)
+            Debug.LogError("DojoManager not found in scene!");
 
         placementValidator = GetComponent<BuildingPlacementValidator>();
         if (placementValidator == null)
@@ -66,9 +86,7 @@ public class BuildingManager : MonoBehaviour
 
         if (buildingMenuUI != null) buildingMenuUI.SetActive(false);
         if (placementMenuUI != null) placementMenuUI.SetActive(false);
-
-        buildingSystem = gameObject.AddComponent<Building_system>();
-        buildingSystem.contractAddress = buildingSystemAddress;
+        if (loadingPanel != null) loadingPanel.SetActive(false);
     }
 
     private void SetupButtonListeners()
@@ -163,7 +181,7 @@ public class BuildingManager : MonoBehaviour
             if (isTemporarilyPlaced)
             {
                 isTemporarilyPlaced = false;
-                Debug.Log("Unfreezing building position");
+                LogDebug("Unfreezing building position");
             }
             else
             {
@@ -191,7 +209,7 @@ public class BuildingManager : MonoBehaviour
             {
                 isTemporarilyPlaced = true;
                 lastValidPosition = currentPreview.transform.position;
-                Debug.Log($"Temporarily placed building at {lastValidPosition}");
+                LogDebug($"Temporarily placed building at {lastValidPosition}");
             }
         }
     }
@@ -220,12 +238,17 @@ public class BuildingManager : MonoBehaviour
                 currentPreview.transform.position = position;
                 currentPreview.transform.rotation = Quaternion.Euler(0, currentRotation, 0);
 
-                isValidPlacement = placementValidator.ValidatePlacement(
+                // Extra check: see if we're on a tile owned by the current player
+                TileVisual tileVisual = hit.collider.GetComponent<TileVisual>();
+                bool isOnOwnedTile = tileVisual != null && tileVisual.IsTileOwnedByCurrentPlayer();
+                
+                isValidPlacement = isOnOwnedTile && placementValidator.ValidatePlacement(
                     currentPreview,
                     currentBuildingData,
                     position,
                     currentRotation
                 );
+                
                 SetPreviewColor(isValidPlacement);
 
                 if (isValidPlacement)
@@ -246,9 +269,9 @@ public class BuildingManager : MonoBehaviour
 
     public void StartPlacingBuilding(BuildingData buildingData)
     {
-        if (!tileManager.CanAfford(buildingData.cost))
+        if (tileManager == null || !tileManager.CanAfford(buildingData.cost))
         {
-            Debug.Log("Cannot afford building!");
+            LogDebug("Cannot afford building!");
             return;
         }
 
@@ -292,6 +315,7 @@ public class BuildingManager : MonoBehaviour
             materialKeeper.originalMaterial = renderer.sharedMaterial;
 
             Material previewMaterial = new Material(renderer.sharedMaterial);
+            previewMaterial.shader = Shader.Find("Transparent/Diffuse");
             Color color = previewMaterial.color;
             color.a = 0.5f;
             previewMaterial.color = color;
@@ -312,114 +336,148 @@ public class BuildingManager : MonoBehaviour
             else
             {
                 Debug.LogWarning("Original material not found for renderer: " + renderer.name);
+                // Try to create a new opaque material as a fallback
+                Material fallbackMaterial = new Material(Shader.Find("Standard"));
+                renderer.material = fallbackMaterial;
             }
         }
     }
 
     private async void ConfirmPlacement()
     {
-        if (!isValidPlacement || currentPreview == null || !isTemporarilyPlaced) 
+        if (!isValidPlacement || currentPreview == null || !isTemporarilyPlaced || isProcessingTransaction) 
         {
-            Debug.Log("Invalid placement position or building not temporarily placed!");
+            LogDebug($"Invalid placement - validPlacement: {isValidPlacement}, preview: {currentPreview != null}, temporarilyPlaced: {isTemporarilyPlaced}, processing: {isProcessingTransaction}");
             return;
         }
 
+        if (tileManager == null || !tileManager.CanAfford(currentBuildingData.cost))
+        {
+            LogDebug("Cannot afford building!");
+            return;
+        }
+        
+        // Convert building category to appropriate building type ID
+        uint buildingTypeId = (uint)currentBuildingData.buildingCategory;
+        
+        Vector3 finalPosition = lastValidPosition;
+        LogDebug($"Confirming building placement at position: {finalPosition}");
+        
+        // Show loading UI
+        ShowLoadingUI("Placing building...");
+        isProcessingTransaction = true;
+        
+        GameObject placedBuilding = null;
+        bool success = false;
+        
         try
         {
-            if (!tileManager.CanAfford(currentBuildingData.cost))
+            // Set a local reference to the preview building
+            placedBuilding = currentPreview;
+            currentPreview = null; // Unset preview to avoid destroying it on cancel
+            
+            uint x = (uint)Mathf.Round(finalPosition.x);
+            uint z = (uint)Mathf.Round(finalPosition.z);
+            uint rotation = (uint)(currentRotation / rotationAngle);
+            
+            // Call Dojo to place the building on-chain
+            if (dojoManager != null && dojoManager.IsInitialized())
             {
-                Debug.Log("Cannot afford building!");
-                return;
+                success = await dojoManager.PlaceBuildingOnChainAsync(
+                    x, z, buildingTypeId, 
+                    (uint)currentBuildingData.residents,
+                    (uint)currentBuildingData.jobs, 
+                    (uint)currentBuildingData.shoppingSpace, 
+                    rotation
+                );
             }
-
-            Vector3 finalPosition = lastValidPosition;
-            Debug.Log($"Starting building placement at position: {finalPosition}");
-
-            // Initialize account and provider
-            Debug.Log("Initializing Dojo account");
-            var provider = new JsonRpcClient(dojoConfig.rpcUrl);
-            var signer = new SigningKey(dojoConfig.masterPrivateKey);
-            var account = new Account(provider, signer, new FieldElement(dojoConfig.masterAddress));
-
-            // Convert building category to BuildingType
-            uint buildingTypeId;
-            switch (currentBuildingData.buildingCategory)
+            else
             {
-                case BuildingCategory.Residential:
-                    buildingTypeId = (uint)BuildingType.Residential;
-                    break;
-                case BuildingCategory.Commercial:
-                    buildingTypeId = (uint)BuildingType.Commercial;
-                    break;
-                case BuildingCategory.Industrial:
-                    buildingTypeId = (uint)BuildingType.Industrial;
-                    break;
-                default:
-                    Debug.LogError($"Unknown building category: {currentBuildingData.buildingCategory}");
-                    return;
+                // Fallback for testing without blockchain
+                success = true;
+                await Task.Delay(1000); // Simulate blockchain delay
             }
-
-            // Make on-chain call
-            Debug.Log("Making on-chain call");
-            var txHash = await buildingSystem.place_building(
-                account,
-                (uint)finalPosition.x,
-                (uint)finalPosition.z,
-                buildingTypeId,
-                (uint)currentBuildingData.residents,
-                (uint)currentBuildingData.jobs,
-                (uint)currentBuildingData.shoppingSpace,
-                (uint)(currentRotation / rotationAngle)
-            );
-            Debug.Log($"Transaction hash: {txHash}");
-
-            // Update game state
-            Debug.Log("Updating game state");
-            tileManager.DeductMoney(currentBuildingData.cost);
-            SetPreviewOpaque(currentPreview);
-
-            // Finalize building placement
-            Debug.Log("Finalizing building placement");
-            GameObject placedBuilding = currentPreview;
-            currentPreview = null;
-            placedBuilding.transform.SetParent(transform);
-
-            // Add the city_builder_Building component and set its properties
-            var buildingComponent = placedBuilding.AddComponent<city_builder_Building>();
-            buildingComponent.player = new FieldElement(dojoConfig.masterAddress);
-            buildingComponent.x = (uint)finalPosition.x;
-            buildingComponent.y = (uint)finalPosition.z;
-            buildingComponent.building_type = buildingTypeId;
-            buildingComponent.residents = (uint)currentBuildingData.residents;
-            buildingComponent.jobs = (uint)currentBuildingData.jobs;
-            buildingComponent.shopping_space = (uint)currentBuildingData.shoppingSpace;
-            buildingComponent.happy_residents = 0;
-            buildingComponent.rotation = (uint)(currentRotation / rotationAngle);
-
-            // Register with EconomyManager
-            Debug.Log("Registering with EconomyManager");
-            var economyManager = FindObjectOfType<EconomyManager>();
-            if (economyManager == null)
+            
+            if (success)
             {
-                Debug.LogError("EconomyManager not found in scene!");
-                economyManager = gameObject.AddComponent<EconomyManager>();
+                // Update player money locally
+                tileManager.DeductMoney(currentBuildingData.cost);
+                
+                if (placedBuilding != null)
+                {
+                    // Finalize building placement
+                    LogDebug("Finalizing building placement");
+                    SetPreviewOpaque(placedBuilding);
+                    placedBuilding.transform.SetParent(transform);
+
+                    // Add the city_builder_Building component and set its properties
+                    var buildingComponent = placedBuilding.AddComponent<city_builder_Building>();
+                    
+                    // Set the player address
+                    if (dojoManager != null && dojoManager.GetAccount() != null)
+                    {
+                        buildingComponent.player = dojoManager.GetAccount().Address;
+                    }
+                    else
+                    {
+                        // Fallback for testing
+                        buildingComponent.player = new Dojo.Starknet.FieldElement("0x1234");
+                    }
+                    
+                    buildingComponent.x = x;
+                    buildingComponent.y = z;
+                    buildingComponent.building_type = buildingTypeId;
+                    buildingComponent.residents = (uint)currentBuildingData.residents;
+                    buildingComponent.jobs = (uint)currentBuildingData.jobs;
+                    buildingComponent.shopping_space = (uint)currentBuildingData.shoppingSpace;
+                    buildingComponent.happy_residents = 0;
+                    buildingComponent.rotation = rotation;
+
+                    // Register with EconomyManager
+                    LogDebug("Registering with EconomyManager");
+                    if (economyManager != null)
+                    {
+                        economyManager.RegisterBuilding(placedBuilding, finalPosition);
+                    }
+                    
+                    // Register with GameStateManager
+                    if (gameStateManager != null)
+                    {
+                        gameStateManager.RegisterBuilding(placedBuilding);
+                    }
+                    
+                    LogDebug($"Building placement completed successfully at position {finalPosition}");
+                }
             }
-
-            economyManager.RegisterBuilding(placedBuilding, finalPosition);
-
-            // Cleanup
-            Debug.Log("Cleanup");
-            isPlacing = false;
-            isTemporarilyPlaced = false;
-            placementMenuUI.SetActive(false);
-
-            Debug.Log($"Building placement completed successfully at position {finalPosition}");
+            else
+            {
+                LogDebug("Building placement failed on blockchain");
+                if (placedBuilding != null)
+                {
+                    Destroy(placedBuilding);
+                    placedBuilding = null;
+                }
+            }
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"Failed to place building: {e.Message}");
-            Debug.LogException(e);
-            CancelPlacement();
+            Debug.LogError($"Error placing building: {e.Message}");
+            if (placedBuilding != null)
+            {
+                Destroy(placedBuilding);
+                placedBuilding = null;
+            }
+        }
+        finally
+        {
+            // Cleanup
+            isPlacing = false;
+            isTemporarilyPlaced = false;
+            placementMenuUI.SetActive(false);
+            
+            // Hide loading UI
+            HideLoadingUI();
+            isProcessingTransaction = false;
         }
     }
 
@@ -464,5 +522,34 @@ public class BuildingManager : MonoBehaviour
                 return building;
         }
         return null;
+    }
+    
+    private void ShowLoadingUI(string message)
+    {
+        if (loadingPanel != null)
+        {
+            loadingPanel.SetActive(true);
+            
+            if (loadingText != null)
+            {
+                loadingText.text = message;
+            }
+        }
+    }
+    
+    private void HideLoadingUI()
+    {
+        if (loadingPanel != null)
+        {
+            loadingPanel.SetActive(false);
+        }
+    }
+    
+    private void LogDebug(string message)
+    {
+        if (logDebugInfo)
+        {
+            Debug.Log($"[BuildingManager] {message}");
+        }
     }
 }
