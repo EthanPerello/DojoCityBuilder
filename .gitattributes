@@ -1,0 +1,2 @@
+DojoCityBuilder_0.1.0/UnityProject/Assets/Dojo/Plugins/iOS/libdojo_c.a filter=lfs diff=lfs merge=lfs -text
+DojoCityBuilder_0.1.0/UnityProject/Assets/Dojo/Plugins/Windows/libdojo_c.dll filter=lfs diff=lfs merge=lfs -text
