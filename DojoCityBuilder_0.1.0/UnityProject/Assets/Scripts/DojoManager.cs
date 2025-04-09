@@ -20,6 +20,12 @@ public class DojoManager : MonoBehaviour
     public string accountAddress;
     public string privateKey;
     public bool enableDebug = true;
+    
+    [Header("Demo Mode")]
+    public bool demoMode = true; // Enable demo mode by default
+    public float transactionTimeout = 10f; // 10 seconds timeout for transactions
+    [Tooltip("Simulate transaction delays in demo mode")]
+    public float demoTransactionDelay = 1f; // Seconds to simulate transaction time
 
     [Header("System Addresses")]
     public string playerSystemAddress = "0x03be249f6155ccff1cd98b02098bb60e37c8986adfb9d4f0c1dc6b0bb9487edb";
@@ -41,6 +47,9 @@ public class DojoManager : MonoBehaviour
     public GameObject loadingPanel;
     public TMP_Text loadingText;
     public Button reconnectButton;
+    
+    [Header("UI Controls")]
+    public GameObject demoModeIndicator; // Optional UI element to show demo mode is active
 
     [Header("Debug")]
     public bool logDebug = true;
@@ -64,6 +73,12 @@ public class DojoManager : MonoBehaviour
         {
             reconnectButton.onClick.AddListener(ReconnectToDojo);
         }
+        
+        // Show demo mode indicator if available
+        if (demoModeIndicator != null)
+        {
+            demoModeIndicator.SetActive(demoMode);
+        }
     }
 
     private void Start()
@@ -81,7 +96,52 @@ public class DojoManager : MonoBehaviour
         isConnecting = true;
         ShowLoadingMessage("Connecting to blockchain...");
         InitializeSystems();
-        StartCoroutine(ConnectCoroutine());
+        
+        if (demoMode)
+        {
+            LogDebug("*** DEMO MODE ACTIVE - No blockchain connection will be made ***");
+            StartCoroutine(DemoModeInitializeCoroutine());
+        }
+        else
+        {
+            StartCoroutine(ConnectCoroutine());
+        }
+    }
+    
+    private IEnumerator DemoModeInitializeCoroutine()
+    {
+        ShowLoadingMessage("Initializing demo mode...");
+        yield return new WaitForSeconds(1f); // Brief delay for UI feedback
+        
+        // Simulate a successful initialization
+        isInitialized = true;
+        LogDebug("Demo mode initialized successfully");
+        
+        // In demo mode, we still want to create a dummy account for consistency
+        try
+        {
+            // Create a demo account with a fixed address
+            account = new Account(
+                null, 
+                new SigningKey("0x1234567890"), 
+                new FieldElement("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+            );
+            LogDebug("Created demo account");
+        }
+        catch (Exception ex)
+        {
+            LogDebug($"Note: Error creating demo account: {ex.Message} - This is normal in demo mode and can be ignored");
+        }
+        
+        // Notify listeners of success
+        if (OnDojoInitialized != null) OnDojoInitialized(true);
+        
+        // Simulate initial sync
+        yield return new WaitForSeconds(0.5f);
+        if (OnDojoSynced != null) OnDojoSynced();
+        
+        HideLoadingMessage();
+        isConnecting = false;
     }
     
     private IEnumerator ConnectCoroutine()
@@ -526,6 +586,20 @@ public class DojoManager : MonoBehaviour
     // Core functionality for buying tiles
     public async Task<bool> BuyTileOnChainAsync(uint x, uint y)
     {
+        // Demo mode - always succeed after a short delay
+        if (demoMode)
+        {
+            LogDebug($"DEMO MODE: Simulating purchase of tile at ({x}, {y})");
+            ShowLoadingMessage($"DEMO: Buying tile at ({x}, {y})...");
+            
+            // Simulate blockchain delay
+            await Task.Delay((int)(demoTransactionDelay * 1000));
+            
+            HideLoadingMessage();
+            return true;
+        }
+        
+        // Real blockchain mode
         if (!isInitialized || tileSystem == null || account == null)
         {
             LogDebug("Cannot buy tile - Dojo is not fully initialized");
@@ -541,8 +615,22 @@ public class DojoManager : MonoBehaviour
             FieldElement txHash = await tileSystem.buy_tile(account, x, y);
             LogDebug($"Transaction submitted with hash: {txHash.Hex()}");
             
-            // Wait a bit for the transaction to be processed
-            await Task.Delay(5000);
+            // Set up timeout task
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(transactionTimeout));
+            
+            // Create a task to wait for transaction (we simulate this since the SDK doesn't have WaitForTransaction)
+            var waitTask = Task.Run(async () => {
+                await Task.Delay(5000); // Wait 5 seconds to simulate transaction confirmation
+                return true;
+            });
+            
+            // Wait for either completion or timeout
+            if (await Task.WhenAny(waitTask, timeoutTask) == timeoutTask)
+            {
+                LogDebug("Transaction timed out");
+                HideLoadingMessage();
+                return false;
+            }
             
             // Sync data to ensure UI is updated
             StartCoroutine(SyncDataCoroutine());
@@ -594,6 +682,20 @@ public class DojoManager : MonoBehaviour
     public async Task<bool> PlaceBuildingOnChainAsync(uint x, uint y, uint buildingType, 
         uint residents, uint jobs, uint shoppingSpace, uint rotation)
     {
+        // Demo mode - always succeed after a short delay
+        if (demoMode)
+        {
+            LogDebug($"DEMO MODE: Simulating placement of building at ({x}, {y})");
+            ShowLoadingMessage($"DEMO: Placing building at ({x}, {y})...");
+            
+            // Simulate blockchain delay
+            await Task.Delay((int)(demoTransactionDelay * 1000));
+            
+            HideLoadingMessage();
+            return true;
+        }
+
+        // Real blockchain mode
         if (!isInitialized || buildingSystem == null || account == null)
         {
             LogDebug("Cannot place building - Dojo is not fully initialized");
@@ -611,8 +713,22 @@ public class DojoManager : MonoBehaviour
                 
             LogDebug($"Transaction submitted with hash: {txHash.Hex()}");
             
-            // Wait a bit for the transaction to be processed
-            await Task.Delay(5000);
+            // Set up timeout task
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(transactionTimeout));
+            
+            // Create a task to wait for transaction (we simulate this since the SDK doesn't have WaitForTransaction)
+            var waitTask = Task.Run(async () => {
+                await Task.Delay(5000); // Wait 5 seconds to simulate transaction confirmation
+                return true;
+            });
+            
+            // Wait for either completion or timeout
+            if (await Task.WhenAny(waitTask, timeoutTask) == timeoutTask)
+            {
+                LogDebug("Transaction timed out");
+                HideLoadingMessage();
+                return false;
+            }
             
             // Sync data to ensure UI is updated
             StartCoroutine(SyncDataCoroutine());
@@ -665,6 +781,20 @@ public class DojoManager : MonoBehaviour
     // Reset player data
     public async Task<bool> ResetPlayerOnChainAsync()
     {
+        // Demo mode - always succeed after a short delay
+        if (demoMode)
+        {
+            LogDebug("DEMO MODE: Simulating player data reset");
+            ShowLoadingMessage("DEMO: Resetting player data...");
+            
+            // Simulate blockchain delay
+            await Task.Delay((int)(demoTransactionDelay * 1000));
+            
+            HideLoadingMessage();
+            return true;
+        }
+
+        // Real blockchain mode
         if (!isInitialized || resetSystem == null || account == null)
         {
             LogDebug("Cannot reset player - Dojo is not fully initialized");
@@ -680,8 +810,22 @@ public class DojoManager : MonoBehaviour
             FieldElement txHash = await resetSystem.reset_player_data(account);
             LogDebug($"Transaction submitted with hash: {txHash.Hex()}");
             
-            // Wait a bit for the transaction to be processed
-            await Task.Delay(5000);
+            // Set up timeout task
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(transactionTimeout));
+            
+            // Create a task to wait for transaction (we simulate this since the SDK doesn't have WaitForTransaction)
+            var waitTask = Task.Run(async () => {
+                await Task.Delay(5000); // Wait 5 seconds to simulate transaction confirmation
+                return true;
+            });
+            
+            // Wait for either completion or timeout
+            if (await Task.WhenAny(waitTask, timeoutTask) == timeoutTask)
+            {
+                LogDebug("Transaction timed out");
+                HideLoadingMessage();
+                return false;
+            }
             
             // Sync data to ensure UI is updated
             StartCoroutine(SyncDataCoroutine());
@@ -732,6 +876,22 @@ public class DojoManager : MonoBehaviour
     // Update player money
     public async Task<bool> UpdatePlayerMoneyOnChainAsync(float money, bool showLoadingUI = false)
     {
+        // Demo mode - always succeed immediately
+        if (demoMode)
+        {
+            LogDebug($"DEMO MODE: Simulating update money to {money}");
+            
+            if (showLoadingUI)
+            {
+                ShowLoadingMessage($"DEMO: Updating money to {money}...");
+                await Task.Delay((int)(demoTransactionDelay * 1000 / 2)); // Shorter delay for money updates
+                HideLoadingMessage();
+            }
+            
+            return true;
+        }
+
+        // Real blockchain mode
         if (!isInitialized || playerSystem == null || account == null)
         {
             LogDebug("Cannot update money - Dojo is not fully initialized");
@@ -755,8 +915,7 @@ public class DojoManager : MonoBehaviour
             FieldElement txHash = await playerSystem.update_money(account, moneyBigInt);
             LogDebug($"Transaction submitted with hash: {txHash.Hex()}");
             
-            // Wait a bit for the transaction to be processed
-            await Task.Delay(5000);
+            // We don't wait for money update transactions - fire and forget
             
             return true;
         }
@@ -876,6 +1035,15 @@ public class DojoManager : MonoBehaviour
     /// </summary>
     public bool IsPlayerOwner(FieldElement owner)
     {
+        // In demo mode, consider static addresses as owned by the player
+        if (demoMode)
+        {
+            if (owner == null) return false;
+            
+            // In demo mode, any valid address is considered owned
+            return true;
+        }
+        
         if (account == null || owner == null)
         {
             return false;

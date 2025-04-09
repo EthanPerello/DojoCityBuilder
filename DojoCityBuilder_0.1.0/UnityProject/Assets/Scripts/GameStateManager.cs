@@ -7,6 +7,8 @@ public class GameStateManager : MonoBehaviour
 {
     [Header("Player Data")]
     public float initialPlayerMoney = 1000f;
+    public string currentPlayerName;
+    private bool gameStarted = false;
 
     [Header("Buildings and Tiles")]
     private List<GameObject> placedBuildings = new List<GameObject>();
@@ -14,7 +16,13 @@ public class GameStateManager : MonoBehaviour
     
     [Header("UI")]
     public GameObject loadingScreen;
-    public TMP_Text loadingText; // Changed from Text to TMP_Text
+    public TMP_Text loadingText;
+    
+    [Header("UI References")]
+    public StartScreenManager startScreenManager;
+    public LeaderboardManager leaderboardManager;
+    public CameraController cameraController;
+    public GameObject gameUI; // Main game UI
     
     [Header("Debug")]
     public bool logDebug = true;
@@ -28,9 +36,11 @@ public class GameStateManager : MonoBehaviour
     // Events
     public delegate void GameStateEvent();
     public event GameStateEvent OnGameReset;
+    public event GameStateEvent OnGameStarted;
     
     private void Awake()
     {
+        // Find references to other managers
         tileManager = FindObjectOfType<TileManager>();
         if (tileManager == null)
         {
@@ -49,8 +59,17 @@ public class GameStateManager : MonoBehaviour
             Debug.LogError("DojoManager not found in scene!");
         }
         
+        // Set initial UI state
         if (loadingScreen != null)
             loadingScreen.SetActive(false);
+            
+        // Disable camera controls until game starts
+        if (cameraController != null)
+            cameraController.enabled = false;
+            
+        // Disable game UI until game starts
+        if (gameUI != null)
+            gameUI.SetActive(false);
     }
     
     private void Start()
@@ -58,27 +77,125 @@ public class GameStateManager : MonoBehaviour
         StartCoroutine(InitializeGameCoroutine());
     }
     
-    private IEnumerator InitializeGameCoroutine()
+    public void StartGame()
     {
-        // Show loading screen
-        ShowLoadingScreen("Initializing game...");
+        LogDebug("StartGame called");
         
-        // Wait a frame to ensure other scripts are initialized
-        yield return null;
+        // Get player name from start screen if available
+        if (startScreenManager != null && startScreenManager.playerNameInput != null)
+        {
+            currentPlayerName = startScreenManager.playerNameInput.text.Trim();
+            LogDebug($"Got player name from start screen: {currentPlayerName}");
+        }
+        
+        // Enable camera controls
+        if (cameraController != null)
+        {
+            cameraController.enabled = true;
+            LogDebug("Enabled camera controller");
+        }
+        else
+        {
+            LogDebug("Warning: Camera controller reference is missing");
+        }
+        
+        // Show game UI
+        if (gameUI != null)
+        {
+            gameUI.SetActive(true);
+            LogDebug("Activated game UI");
+        }
+        else
+        {
+            LogDebug("Warning: Game UI reference is missing");
+        }
         
         // Set initial money if no money has been loaded from blockchain
         if (tileManager != null)
         {
             tileManager.SetPlayerMoney(initialPlayerMoney);
+            LogDebug($"Set initial player money to {initialPlayerMoney}");
         }
         
-        // No need to wait for DojoManager here since it runs its own initialization
+        // Register with leaderboard if available
+        if (leaderboardManager != null && !string.IsNullOrEmpty(currentPlayerName))
+        {
+            leaderboardManager.RegisterPlayer(currentPlayerName);
+            LogDebug($"Registered player '{currentPlayerName}' with leaderboard");
+        }
+        else if (leaderboardManager == null)
+        {
+            LogDebug("Warning: Leaderboard manager reference is missing");
+        }
         
-        // Hide loading screen after a short delay
-        yield return new WaitForSeconds(0.5f);
-        HideLoadingScreen();
+        // Set game as started
+        gameStarted = true;
         
-        LogDebug("Game initialized successfully!");
+        // If we have DojoManager, make sure it's initialized
+        if (dojoManager != null && !dojoManager.IsInitialized())
+        {
+            dojoManager.Connect();
+            LogDebug("Connected to Dojo");
+        }
+        
+        // Trigger event
+        if (OnGameStarted != null)
+        {
+            OnGameStarted();
+            LogDebug("OnGameStarted event triggered");
+        }
+        
+        LogDebug("Game started successfully!");
+    }
+    
+    private IEnumerator InitializeGameCoroutine()
+    {
+        // If we have a start screen, let it handle game initialization
+        if (startScreenManager != null)
+        {
+            LogDebug("Using StartScreenManager for initialization");
+            // Just wait until game is started through the start screen
+            while (!gameStarted)
+            {
+                yield return null;
+            }
+        }
+        else
+        {
+            LogDebug("No StartScreenManager found, using direct initialization");
+            // Original initialization code without start screen
+            ShowLoadingScreen("Initializing game...");
+            
+            // Wait a frame to ensure other scripts are initialized
+            yield return null;
+            
+            // Set initial money if no money has been loaded from blockchain
+            if (tileManager != null)
+            {
+                tileManager.SetPlayerMoney(initialPlayerMoney);
+            }
+            
+            // Hide loading screen after a short delay
+            yield return new WaitForSeconds(0.5f);
+            HideLoadingScreen();
+            
+            // Show game UI
+            if (gameUI != null)
+                gameUI.SetActive(true);
+                
+            // Enable camera
+            if (cameraController != null)
+                cameraController.enabled = true;
+            
+            // Set game as started
+            gameStarted = true;
+            
+            // Trigger event
+            if (OnGameStarted != null)
+                OnGameStarted();
+        }
+        
+        LogDebug("Game initialization complete");
     }
     
     public void RegisterBuilding(GameObject building)
@@ -166,6 +283,12 @@ public class GameStateManager : MonoBehaviour
                 economyManager.ClearAllBuildings();
             }
             
+            // Reset leaderboard if available
+            if (leaderboardManager != null && !string.IsNullOrEmpty(currentPlayerName))
+            {
+                leaderboardManager.SetPlayerMoney(currentPlayerName, initialPlayerMoney);
+            }
+            
             // Trigger reset event
             if (OnGameReset != null)
             {
@@ -184,6 +307,24 @@ public class GameStateManager : MonoBehaviour
             HideLoadingScreen();
             isProcessingReset = false;
         }
+    }
+    
+    // Get current player money
+    public float GetCurrentPlayerMoney()
+    {
+        if (tileManager != null)
+        {
+            // Use reflection to get private playerMoney field
+            System.Reflection.FieldInfo field = typeof(TileManager).GetField("playerMoney", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                
+            if (field != null)
+            {
+                return (float)field.GetValue(tileManager);
+            }
+        }
+        
+        return initialPlayerMoney;
     }
     
     private void ShowLoadingScreen(string message)

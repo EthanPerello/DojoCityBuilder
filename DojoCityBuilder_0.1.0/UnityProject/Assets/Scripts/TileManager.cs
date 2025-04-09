@@ -34,6 +34,7 @@ public class TileManager : MonoBehaviour
     
     [Header("References")]
     public BuildingManager buildingManager;
+    public LeaderboardManager leaderboardManager;
     
     [Header("Debug")]
     public bool logDebugInfo = true;
@@ -52,6 +53,7 @@ public class TileManager : MonoBehaviour
         if (buildingManager == null) buildingManager = FindObjectOfType<BuildingManager>();
         gameStateManager = FindObjectOfType<GameStateManager>();
         dojoManager = FindObjectOfType<DojoManager>();
+        if (leaderboardManager == null) leaderboardManager = FindObjectOfType<LeaderboardManager>();
         
         // Validate UI elements
         if (tilePanel == null) Debug.LogError("Tile panel reference is missing!");
@@ -203,6 +205,12 @@ public class TileManager : MonoBehaviour
         {
             playerMoneyText.text = $"Money: ${playerMoney:F2}";
         }
+        
+        // Update leaderboard if available
+        if (leaderboardManager != null && gameStateManager != null && !string.IsNullOrEmpty(gameStateManager.currentPlayerName))
+        {
+            leaderboardManager.SetPlayerMoney(gameStateManager.currentPlayerName, playerMoney);
+        }
     }
 
     public void SelectTile(TileVisual tile)
@@ -277,6 +285,8 @@ public class TileManager : MonoBehaviour
         if (playerMoney < tileCost) 
         {
             LogDebug($"Cannot buy tile. Money: {playerMoney:F2}, Cost: {tileCost:F2}");
+            ShowLoadingUI("Not enough money to buy this tile!");
+            StartCoroutine(HideLoadingUIAfterDelay(2f));
             return;
         }
         
@@ -291,11 +301,8 @@ public class TileManager : MonoBehaviour
         {
             LogDebug($"Cannot buy tile - it's already owned");
             // Show a message to the player
-            if (loadingText != null)
-            {
-                ShowLoadingUI("This tile is already owned!");
-                StartCoroutine(HideLoadingUIAfterDelay(2f));
-            }
+            ShowLoadingUI("This tile is already owned!");
+            StartCoroutine(HideLoadingUIAfterDelay(2f));
             return;
         }
 
@@ -308,112 +315,117 @@ public class TileManager : MonoBehaviour
         // Set flag to prevent multiple transactions
         isProcessingTransaction = true;
         
-        // Show loading UI
-        ShowLoadingUI("Purchasing tile...");
-        
         bool success = false;
         
-        // Call Dojo to buy the tile on-chain
-        if (dojoManager != null && dojoManager.IsInitialized())
-        {
-            // Use reflection to check if the async method exists
-            var asyncMethod = dojoManager.GetType().GetMethod("BuyTileOnChainAsync");
-            
-            if (asyncMethod != null)
+        try {
+            // Call Dojo to buy the tile on-chain
+            if (dojoManager != null && dojoManager.IsInitialized())
             {
-                // Async method exists, so use it
-                LogDebug("Using async method for tile purchase");
-                try
+                // Use reflection to check if the async method exists
+                var asyncMethod = dojoManager.GetType().GetMethod("BuyTileOnChainAsync");
+                
+                if (asyncMethod != null)
                 {
-                    success = await dojoManager.BuyTileOnChainAsync(x, y);
+                    // Async method exists, so use it
+                    LogDebug("Using async method for tile purchase");
+                    try
+                    {
+                        success = await dojoManager.BuyTileOnChainAsync(x, y);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Error in BuyTileOnChainAsync: {ex.Message}");
+                        success = false;
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    Debug.LogError($"Error in BuyTileOnChainAsync: {ex.Message}");
-                    success = false;
+                    // Fallback to callback-based method
+                    LogDebug("Falling back to callback-based method");
+                    
+                    // Create a task completion source to wait for the callback
+                    var tcs = new TaskCompletionSource<bool>();
+                    
+                    dojoManager.BuyTileOnChain(x, y, (result) => {
+                        success = result;
+                        tcs.SetResult(result);
+                    });
+                    
+                    // Wait for callback to complete
+                    await tcs.Task;
                 }
             }
             else
             {
-                // Fallback to callback-based method
-                LogDebug("Falling back to callback-based method");
-                
-                // Create a task completion source to wait for the callback
-                var tcs = new TaskCompletionSource<bool>();
-                
-                dojoManager.BuyTileOnChain(x, y, (result) => {
-                    success = result;
-                    tcs.SetResult(result);
-                });
-                
-                // Wait for callback to complete
-                await tcs.Task;
+                // Fallback for testing without blockchain
+                success = true;
+                await Task.Delay(1000); // Simulate blockchain delay
             }
-        }
-        else
-        {
-            // Fallback for testing without blockchain
-            success = true;
-            await Task.Delay(1000); // Simulate blockchain delay
-        }
-        
-        if (success)
-        {
-            // Update player money locally
-            playerMoney -= tileCost;
-            UpdateMoneyDisplay();
             
-            // Update the tile ownership locally
-            if (tileToPurchase != null && tileToPurchase.TileData != null)
+            if (success)
             {
-                // Create dummy FieldElement to mark ownership
-                if (dojoManager != null && dojoManager.GetAccount() != null)
+                // Update player money locally
+                playerMoney -= tileCost;
+                UpdateMoneyDisplay();
+                
+                // Update the tile ownership locally
+                if (tileToPurchase != null && tileToPurchase.TileData != null)
                 {
-                    tileToPurchase.TileData.player = dojoManager.GetAccount().Address;
-                }
-                else
-                {
-                    // Fallback for testing
-                    tileToPurchase.TileData.player = new FieldElement("0x1234");
+                    // Create dummy FieldElement to mark ownership
+                    if (dojoManager != null && dojoManager.GetAccount() != null)
+                    {
+                        tileToPurchase.TileData.player = dojoManager.GetAccount().Address;
+                    }
+                    else
+                    {
+                        // Fallback for testing
+                        tileToPurchase.TileData.player = new FieldElement("0x1234");
+                    }
+                    
+                    // Force a visual update
+                    tileToPurchase.ForceRegenerateMaterial();
+                    tileToPurchase.UpdateVisuals();
+                    LogDebug($"Updated visuals for tile at ({x}, {y})");
+                    
+                    // Register with game state manager
+                    if (gameStateManager != null)
+                    {
+                        gameStateManager.RegisterOwnedTile(x, y);
+                    }
                 }
                 
-                // Force a visual update
-                tileToPurchase.ForceRegenerateMaterial();
-                tileToPurchase.UpdateVisuals();
-                LogDebug($"Updated visuals for tile at ({x}, {y})");
+                LogDebug($"Successfully purchased tile at ({x}, {y}). New balance: {playerMoney:F2}");
                 
-                // Register with game state manager
-                if (gameStateManager != null)
+                // Update the UI
+                if (tilePanel != null && tilePanel.activeSelf)
                 {
-                    gameStateManager.RegisterOwnedTile(x, y);
+                    if (buyTileButton != null)
+                        buyTileButton.gameObject.SetActive(false);
+                    if (buyBuildingButton != null)
+                        buyBuildingButton.gameObject.SetActive(true);
                 }
             }
-            
-            LogDebug($"Successfully purchased tile at ({x}, {y}). New balance: {playerMoney:F2}");
-            
-            // Update the UI
-            if (tilePanel != null && tilePanel.activeSelf)
+            else
             {
-                if (buyTileButton != null)
-                    buyTileButton.gameObject.SetActive(false);
-                if (buyBuildingButton != null)
-                    buyBuildingButton.gameObject.SetActive(true);
+                LogDebug($"Failed to purchase tile at ({x}, {y})");
+                ShowLoadingUI("Transaction failed. Please try again.");
+                StartCoroutine(HideLoadingUIAfterDelay(2f));
             }
         }
-        else
-        {
-            LogDebug($"Failed to purchase tile at ({x}, {y})");
-            ShowLoadingUI("Transaction failed. Please try again.");
-            StartCoroutine(HideLoadingUIAfterDelay(2f));
+        catch (Exception ex) {
+            Debug.LogError($"Exception during tile purchase: {ex.Message}");
+            ShowLoadingUI($"Error: {ex.Message}");
+            StartCoroutine(HideLoadingUIAfterDelay(3f));
+            success = false;
         }
-        
-        // Clean up regardless of success or failure
-        if (success)
-        {
-            HideLoadingUI();
+        finally {
+            // Always ensure we clean up properly
+            if (success) {
+                HideLoadingUI();
+            }
+            
+            isProcessingTransaction = false;
         }
-        
-        isProcessingTransaction = false;
         
         // Re-select the tile to refresh the UI completely
         if (tileToPurchase != null)

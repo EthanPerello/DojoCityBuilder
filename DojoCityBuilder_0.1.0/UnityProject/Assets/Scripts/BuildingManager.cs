@@ -4,6 +4,7 @@ using UnityEngine.EventSystems;
 using System.Collections;
 using TMPro;
 using System.Threading.Tasks;
+using System;
 
 public class BuildingManager : MonoBehaviour
 {
@@ -383,13 +384,19 @@ public class BuildingManager : MonoBehaviour
             // Call Dojo to place the building on-chain
             if (dojoManager != null && dojoManager.IsInitialized())
             {
-                success = await dojoManager.PlaceBuildingOnChainAsync(
-                    x, z, buildingTypeId, 
-                    (uint)currentBuildingData.residents,
-                    (uint)currentBuildingData.jobs, 
-                    (uint)currentBuildingData.shoppingSpace, 
-                    rotation
-                );
+                try {
+                    success = await dojoManager.PlaceBuildingOnChainAsync(
+                        x, z, buildingTypeId, 
+                        (uint)currentBuildingData.residents,
+                        (uint)currentBuildingData.jobs, 
+                        (uint)currentBuildingData.shoppingSpace, 
+                        rotation
+                    );
+                }
+                catch (Exception ex) {
+                    Debug.LogError($"Error calling PlaceBuildingOnChainAsync: {ex.Message}");
+                    // Continue with failure handling
+                }
             }
             else
             {
@@ -457,6 +464,9 @@ public class BuildingManager : MonoBehaviour
                     Destroy(placedBuilding);
                     placedBuilding = null;
                 }
+                
+                ShowLoadingUI("Failed to place building. Please try again.");
+                StartCoroutine(DelayedHideLoading(2f));
             }
         }
         catch (System.Exception e)
@@ -467,6 +477,9 @@ public class BuildingManager : MonoBehaviour
                 Destroy(placedBuilding);
                 placedBuilding = null;
             }
+            
+            ShowLoadingUI($"Error: {e.Message}");
+            StartCoroutine(DelayedHideLoading(2f));
         }
         finally
         {
@@ -475,10 +488,20 @@ public class BuildingManager : MonoBehaviour
             isTemporarilyPlaced = false;
             placementMenuUI.SetActive(false);
             
-            // Hide loading UI
-            HideLoadingUI();
+            // Hide loading UI (if not showing an error)
+            if (success) {
+                HideLoadingUI();
+            }
+            
             isProcessingTransaction = false;
         }
+    }
+
+    // Helper method to hide loading UI after delay
+    private IEnumerator DelayedHideLoading(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        HideLoadingUI();
     }
 
     public void NextBuilding()
