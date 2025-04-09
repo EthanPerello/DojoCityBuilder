@@ -1,7 +1,27 @@
-/Library/
-/Temp/
-/Obj/
-/Logs/
-/UserSettings/
-!DojoCityBuilder_0.1.0/UnityProject/Build/
-!DojoCityBuilder_0.1.0/UnityProject/Build/**/*
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+MemoryCaptures/
+
+# System/Editor
+.DS_Store
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln
+*.csproj
+
+# Unity Junk
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.apk
+*.unitypackage
+*.blob
