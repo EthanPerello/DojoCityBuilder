@@ -1,0 +1,17 @@
+[world]
+name = "city-builder-v2"  # Changed name
+description = "On-chain city builder game"
+seed = "city_builder_v2"  # Changed seed
+
+[env]
+rpc_url = "https://api.cartridge.gg/x/my-city-builder/katana"
+account_address = "0x0127fd5f1fe78a71f8bcd1fec63e3fe2f0486b6ecd5c86a0466c3a21fa5cfcec"
+private_key = "0xc5b2fcab997346f3ea1c00b002ecf6f382c5f9c9659a3894eb783c5320f912"
+
+[namespace]
+default = "city_builder"
+
+[writers]
+"city_builder-Building" = ["city_builder-building_system", "city_builder-reset_system"]
+"city_builder-Tile" = ["city_builder-tile_system", "city_builder-reset_system"]
+"city_builder-Player" = ["city_builder-player_system", "city_builder-reset_system"]
