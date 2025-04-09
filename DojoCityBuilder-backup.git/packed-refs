@@ -1,7 +1,0 @@
-# pack-refs with: peeled fully-peeled sorted 
-69d91ae150fcea6e5f1e99ee17653a2ec410ecfe refs/heads/main
-ad28430a236db8ce1fa5b80a5ad974a181c0c930 refs/heads/v0.1.0
-ad28430a236db8ce1fa5b80a5ad974a181c0c930 refs/heads/v0.2.0
-69d91ae150fcea6e5f1e99ee17653a2ec410ecfe refs/remotes/origin/HEAD
-69d91ae150fcea6e5f1e99ee17653a2ec410ecfe refs/remotes/origin/main
-69d91ae150fcea6e5f1e99ee17653a2ec410ecfe refs/remotes/origin/v0.1.0
