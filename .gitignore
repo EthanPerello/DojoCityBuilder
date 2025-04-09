@@ -1,0 +1,18 @@
+# Ignore native plugin binaries
+*.dll
+*.a
+*.dylib
+*.bundle
+*.so
+
+# Unity specific
+[Ll]ibrary/
+[Tt]emp/
+[Bb]uild/
+[Bb]uilds/
+obj/
+*.csproj
+*.sln
+*.user
+.vscode/
+.DS_Store
