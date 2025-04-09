@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e3e3787d4f4f4fffbc8b55513675df8, type: 3}
+  m_Name: Apartments
+  m_EditorClassIdentifier: 
+  buildingName: Apartment
+  buildingPrefab: {fileID: 7860386891110439410, guid: 3562886de1f164adb9e925fd10432aba, type: 3}
+  buildingCategory: 0
+  cost: 500
+  residents: 20
+  jobs: 0
+  shoppingSpace: 0
+  description: 
