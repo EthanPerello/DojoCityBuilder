@@ -592,13 +592,31 @@ public class DojoManager : MonoBehaviour
             LogDebug($"DEMO MODE: Simulating purchase of tile at ({x}, {y})");
             ShowLoadingMessage($"DEMO: Buying tile at ({x}, {y})...");
             
-            // Simulate blockchain delay
-            await Task.Delay((int)(demoTransactionDelay * 1000));
+            #if UNITY_WEBGL && !UNITY_EDITOR
+            // For WebGL builds, we need to use coroutines instead of Task.Delay
+            // Create a TaskCompletionSource that our coroutine will complete
+            var tcs = new TaskCompletionSource<bool>();
             
-            HideLoadingMessage();
-            return true;
+            // Start coroutine to handle the WebGL-specific flow
+            StartCoroutine(WebGLDemoModePurchaseCoroutine(x, y, tcs));
+            
+            // Wait for the coroutine to complete the task
+            return await tcs.Task;
+            #else
+            // For other platforms, use Task.Delay as before
+            try {
+                await Task.Delay((int)(demoTransactionDelay * 1000));
+                HideLoadingMessage();
+                return true;
+            }
+            catch (Exception ex) {
+                LogDebug($"Error in demo mode delay: {ex.Message}");
+                HideLoadingMessage();
+                return true; // Still return true in demo mode
+            }
+            #endif
         }
-        
+
         // Real blockchain mode
         if (!isInitialized || tileSystem == null || account == null)
         {
@@ -648,6 +666,23 @@ public class DojoManager : MonoBehaviour
         }
     }
     
+    // WebGL-specific helper coroutine for demo mode purchases
+    private IEnumerator WebGLDemoModePurchaseCoroutine(uint x, uint y, TaskCompletionSource<bool> tcs)
+    {
+        LogDebug($"WebGL: Starting demo mode purchase coroutine for tile ({x}, {y})");
+        
+        // Use WaitForSeconds instead of Task.Delay for WebGL
+        yield return new WaitForSeconds(demoTransactionDelay);
+        
+        // Make sure to hide the loading UI
+        HideLoadingMessage();
+        
+        LogDebug("WebGL: Demo purchase completed successfully");
+        
+        // Complete the task with success
+        tcs.SetResult(true);
+    }
+    
     // Legacy callback-based version for compatibility
     public void BuyTileOnChain(uint x, uint y, Action<bool> callback)
     {
@@ -688,11 +723,29 @@ public class DojoManager : MonoBehaviour
             LogDebug($"DEMO MODE: Simulating placement of building at ({x}, {y})");
             ShowLoadingMessage($"DEMO: Placing building at ({x}, {y})...");
             
-            // Simulate blockchain delay
-            await Task.Delay((int)(demoTransactionDelay * 1000));
+            #if UNITY_WEBGL && !UNITY_EDITOR
+            // For WebGL builds, we need to use coroutines instead of Task.Delay
+            var tcs = new TaskCompletionSource<bool>();
             
-            HideLoadingMessage();
-            return true;
+            // Start coroutine to handle the WebGL-specific flow
+            StartCoroutine(WebGLDemoModePlaceBuildingCoroutine(x, y, buildingType, 
+                residents, jobs, shoppingSpace, rotation, tcs));
+            
+            // Wait for the coroutine to complete the task
+            return await tcs.Task;
+            #else
+            // For other platforms, use Task.Delay as before
+            try {
+                await Task.Delay((int)(demoTransactionDelay * 1000));
+                HideLoadingMessage();
+                return true;
+            }
+            catch (Exception ex) {
+                LogDebug($"Error in demo mode delay: {ex.Message}");
+                HideLoadingMessage();
+                return true; // Still return true in demo mode
+            }
+            #endif
         }
 
         // Real blockchain mode
@@ -746,6 +799,24 @@ public class DojoManager : MonoBehaviour
         }
     }
     
+    // WebGL-specific helper coroutine for demo mode building placement
+    private IEnumerator WebGLDemoModePlaceBuildingCoroutine(uint x, uint y, uint buildingType, 
+        uint residents, uint jobs, uint shoppingSpace, uint rotation, TaskCompletionSource<bool> tcs)
+    {
+        LogDebug($"WebGL: Starting demo mode building placement coroutine for ({x}, {y})");
+        
+        // Use WaitForSeconds instead of Task.Delay for WebGL
+        yield return new WaitForSeconds(demoTransactionDelay);
+        
+        // Make sure to hide the loading UI
+        HideLoadingMessage();
+        
+        LogDebug("WebGL: Demo building placement completed successfully");
+        
+        // Complete the task with success
+        tcs.SetResult(true);
+    }
+    
     // Legacy callback-based version for compatibility
     public void PlaceBuildingOnChain(uint x, uint y, uint buildingType, uint residents, 
         uint jobs, uint shoppingSpace, uint rotation, Action<bool> callback)
@@ -787,11 +858,28 @@ public class DojoManager : MonoBehaviour
             LogDebug("DEMO MODE: Simulating player data reset");
             ShowLoadingMessage("DEMO: Resetting player data...");
             
-            // Simulate blockchain delay
-            await Task.Delay((int)(demoTransactionDelay * 1000));
+            #if UNITY_WEBGL && !UNITY_EDITOR
+            // For WebGL builds, we need to use coroutines instead of Task.Delay
+            var tcs = new TaskCompletionSource<bool>();
             
-            HideLoadingMessage();
-            return true;
+            // Start coroutine to handle the WebGL-specific flow
+            StartCoroutine(WebGLDemoModeResetPlayerCoroutine(tcs));
+            
+            // Wait for the coroutine to complete the task
+            return await tcs.Task;
+            #else
+            // For other platforms, use Task.Delay as before
+            try {
+                await Task.Delay((int)(demoTransactionDelay * 1000));
+                HideLoadingMessage();
+                return true;
+            }
+            catch (Exception ex) {
+                LogDebug($"Error in demo mode delay: {ex.Message}");
+                HideLoadingMessage();
+                return true; // Still return true in demo mode
+            }
+            #endif
         }
 
         // Real blockchain mode
@@ -843,6 +931,23 @@ public class DojoManager : MonoBehaviour
         }
     }
     
+    // WebGL-specific helper coroutine for demo mode player reset
+    private IEnumerator WebGLDemoModeResetPlayerCoroutine(TaskCompletionSource<bool> tcs)
+    {
+        LogDebug("WebGL: Starting demo mode player reset coroutine");
+        
+        // Use WaitForSeconds instead of Task.Delay for WebGL
+        yield return new WaitForSeconds(demoTransactionDelay);
+        
+        // Make sure to hide the loading UI
+        HideLoadingMessage();
+        
+        LogDebug("WebGL: Demo player reset completed successfully");
+        
+        // Complete the task with success
+        tcs.SetResult(true);
+    }
+    
     // Legacy callback-based version for compatibility
     public void ResetPlayerOnChain(Action<bool> callback)
     {
@@ -884,11 +989,34 @@ public class DojoManager : MonoBehaviour
             if (showLoadingUI)
             {
                 ShowLoadingMessage($"DEMO: Updating money to {money}...");
-                await Task.Delay((int)(demoTransactionDelay * 1000 / 2)); // Shorter delay for money updates
-                HideLoadingMessage();
+                
+                #if UNITY_WEBGL && !UNITY_EDITOR
+                // For WebGL builds, we need to use coroutines instead of Task.Delay
+                var tcs = new TaskCompletionSource<bool>();
+                
+                // Start coroutine to handle the WebGL-specific flow
+                StartCoroutine(WebGLDemoModeUpdateMoneyCoroutine(money, tcs, showLoadingUI));
+                
+                // Wait for the coroutine to complete the task
+                return await tcs.Task;
+                #else
+                // For other platforms, use Task.Delay as before
+                try {
+                    await Task.Delay((int)(demoTransactionDelay * 1000 / 2)); // Shorter delay for money updates
+                    if (showLoadingUI) HideLoadingMessage();
+                    return true;
+                }
+                catch (Exception ex) {
+                    LogDebug($"Error in demo mode delay: {ex.Message}");
+                    if (showLoadingUI) HideLoadingMessage();
+                    return true; // Still return true in demo mode
+                }
+                #endif
             }
-            
-            return true;
+            else
+            {
+                return true; // Immediate success for non-UI updates
+            }
         }
 
         // Real blockchain mode
@@ -932,6 +1060,26 @@ public class DojoManager : MonoBehaviour
                 HideLoadingMessage();
             }
         }
+    }
+    
+    // WebGL-specific helper coroutine for demo mode money updates
+    private IEnumerator WebGLDemoModeUpdateMoneyCoroutine(float money, TaskCompletionSource<bool> tcs, bool showLoadingUI)
+    {
+        LogDebug($"WebGL: Starting demo mode money update coroutine for amount {money}");
+        
+        // Use WaitForSeconds instead of Task.Delay for WebGL
+        yield return new WaitForSeconds(demoTransactionDelay / 2); // Shorter delay for money updates
+        
+        // Make sure to hide the loading UI if requested
+        if (showLoadingUI)
+        {
+            HideLoadingMessage();
+        }
+        
+        LogDebug("WebGL: Demo money update completed successfully");
+        
+        // Complete the task with success
+        tcs.SetResult(true);
     }
     
     // Legacy callback-based version for compatibility

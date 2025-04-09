@@ -272,6 +272,22 @@ public class TileManager : MonoBehaviour
         }
     }
 
+    private IEnumerator FailsafeLoadingTimer(float maxWaitTime)
+    {
+        LogDebug($"Starting failsafe timer for {maxWaitTime} seconds");
+        
+        // Wait for the specified time
+        yield return new WaitForSeconds(maxWaitTime);
+        
+        // If we're still processing after the timeout, something went wrong
+        if (isProcessingTransaction)
+        {
+            LogDebug("Failsafe triggered: Force-hiding loading UI");
+            HideLoadingUI();
+            isProcessingTransaction = false;
+        }
+    }
+
     private async void HandleBuyTileClick()
     {
         LogDebug("Buy tile button clicked");
@@ -314,6 +330,9 @@ public class TileManager : MonoBehaviour
         
         // Set flag to prevent multiple transactions
         isProcessingTransaction = true;
+        
+        // Start the failsafe timer to ensure loading UI doesn't get stuck
+        StartCoroutine(FailsafeLoadingTimer(15f)); // 15-second failsafe timer
         
         bool success = false;
         
